@@ -1,0 +1,97 @@
+rules_version = '2';
+// Aivoharjoitus – reglas de seguridad de Firestore.
+// Roles: admin · user (ohjaaja) · disabled. Los jugadores entran como usuarios anónimos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function staff() { return signedIn() && request.auth.token.firebase.sign_in_provider == 'password'; }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function hasProfile() { return exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isAdmin() { return staff() && hasProfile() && profile().data.role == 'admin'; }
+    function isUser() { return staff() && hasProfile() && profile().data.role in ['admin', 'user']; }
+    function validName(n) { return n is string && n.size() >= 1 && n.size() <= 40; }
+
+    // Existe cuando ya se ha creado el primer administrador.
+    match /config/setup {
+      allow get: if true;
+      allow create: if staff()
+        && !exists(/databases/$(database)/documents/config/setup)
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && request.resource.data.keys().hasOnly(['done', 'at'])
+        && request.resource.data.done == true;
+      allow update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow get: if isAdmin() || (staff() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow create: if (
+          isAdmin()
+          // Primer administrador: solo mientras config/setup no exista, y creado en el mismo lote.
+          || (staff() && request.auth.uid == uid
+              && request.resource.data.role == 'admin'
+              && !exists(/databases/$(database)/documents/config/setup)
+              && existsAfter(/databases/$(database)/documents/config/setup))
+        )
+        && request.resource.data.keys().hasOnly(['name', 'email', 'role', 'createdAt'])
+        && validName(request.resource.data.name)
+        && request.resource.data.email is string
+        && request.resource.data.role in ['admin', 'user', 'disabled'];
+      // El admin cambia nombre o rol de otros; nadie puede cambiar su propio rol (evita quedarse sin admin).
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name', 'email', 'role', 'createdAt'])
+        && validName(request.resource.data.name)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role in ['admin', 'user', 'disabled']
+        && (uid != request.auth.uid || request.resource.data.role == resource.data.role);
+      allow delete: if false;
+    }
+
+    match /games/{gid} {
+      // Los jugadores leen la partida solo si conocen su enlace (get); listar es solo para el personal.
+      allow get: if signedIn();
+      allow list: if isUser();
+      allow create: if isUser()
+        && request.resource.data.keys().hasOnly(['title', 'hostUid', 'hostName', 'status', 'durationMin', 'createdAt', 'startAt', 'endAt', 'stopPresses', 'groupColor', 'bots', 'finishAt', 'abrupt', 'result'])
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.status == 'lobby'
+        && request.resource.data.durationMin is int
+        && request.resource.data.durationMin >= 1 && request.resource.data.durationMin <= 180
+        && request.resource.data.stopPresses == 0;
+      allow update: if isUser()
+        && (resource.data.hostUid == request.auth.uid || isAdmin())
+        && request.resource.data.hostUid == resource.data.hostUid
+        && request.resource.data.status in ['lobby', 'running', 'ended'];
+      allow delete: if isAdmin();
+
+      function game() { return get(/databases/$(database)/documents/games/$(gid)).data; }
+      function gameOpen() {
+        return game().status in ['lobby', 'running'];
+      }
+
+      match /players/{pid} {
+        allow read: if signedIn();
+        // Cada jugador crea solo su propia ficha (nombre, color votado, 0 puntos) mientras la partida está abierta.
+        allow create: if signedIn() && request.auth.uid == pid && gameOpen()
+          && request.resource.data.keys().hasOnly(['name', 'color', 'points', 'joinedAt', 'updatedAt'])
+          && (request.resource.data.color == null || request.resource.data.color in ['punainen', 'oranssi', 'keltainen', 'vihrea', 'turkoosi', 'sininen', 'violetti', 'pinkki', 'ruskea', 'musta'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 24
+          && request.resource.data.points == 0;
+        // Solo puede sumar entre 1 y 4 puntos por respuesta, y solo mientras la partida está en marcha.
+        allow update: if signedIn() && request.auth.uid == pid
+          && game().status == 'running'
+          && request.resource.data.keys().hasOnly(['name', 'color', 'points', 'joinedAt', 'updatedAt'])
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.color == resource.data.color
+          && request.resource.data.joinedAt == resource.data.joinedAt
+          && request.resource.data.points is int
+          && request.resource.data.points - resource.data.points >= 1
+          && request.resource.data.points - resource.data.points <= 4;
+        // El personal puede quitar a un jugador de la partida.
+        allow delete: if isUser();
+      }
+    }
+  }
+}
