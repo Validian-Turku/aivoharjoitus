@@ -63,7 +63,8 @@ service cloud.firestore {
         && (resource.data.hostUid == request.auth.uid || isAdmin())
         && request.resource.data.hostUid == resource.data.hostUid
         && request.resource.data.status in ['lobby', 'running', 'ended'];
-      allow delete: if isAdmin();
+      // Borrar: quien creó la partida o un administrador
+      allow delete: if isAdmin() || (isUser() && resource.data.hostUid == request.auth.uid);
 
       function game() { return get(/databases/$(database)/documents/games/$(gid)).data; }
       function gameOpen() {

@@ -5,7 +5,7 @@ Web gratuita con tres tipos de acceso:
 | Rol | Qué puede hacer |
 |---|---|
 | **Administrador** (ylläpitäjä) | Todo lo del usuario, y además: crear usuarios y administradores, cambiar roles, desactivar cuentas, enviar enlaces para cambiar la clave y abrir el código del programa (GitHub). |
-| **Usuario** (ohjaaja) | Crear partidas con una duración aproximada, mostrar el enlace y el QR, iniciar la partida, ver la carrera en tiempo real y usar el botón Stop. |
+| **Usuario** (ohjaaja) | Crear y borrar sus partidas con una duración aproximada, mostrar el enlace y el QR, iniciar la partida, ver la carrera en tiempo real y usar el botón Stop. |
 | **Jugador** | Solo entra con el enlace o QR de una partida. Escribe su nombre y juega. No puede cambiar nada más. |
 
 **Botón Stop:** al pulsarlo la primera vez, la partida pasa a terminar en unos 5 minutos. Cada pulsación siguiente quita 1 minuto. Si con una pulsación el tiempo llega a 0, la partida se corta en ese mismo momento.
@@ -15,7 +15,7 @@ Web gratuita con tres tipos de acceso:
 - **Niveles:** cada jugador elige su propio nivel inicial (1–4) al entrar. Todas sus categorías empiezan en ese nivel, y después cada una sube o baja por separado: 2 aciertos seguidos suben un nivel y 2 fallos seguidos bajan uno.
 - **Quitar Tarkkaavuus:** en las preguntas de atención, el jugador tiene el botón «En näe kuvioita hyvin – poista tämä harjoitus». Después de confirmar, solo le salen Muisti y Luokittelu durante esa partida.
 - **Color del grupo:** al entrar, cada jugador vota uno de 10 colores. Al pulsar «Aloita peli» se elige al azar entre los colores más votados, y ese es el color de la ficha del grupo.
-- **Carrera:** los puntos de todos los jugadores se suman en un solo corredor, el **Ryhmä**. Corren con él cuatro corredores automáticos (Kettu, Jänis, Orava y Siili), con colores distintos del del grupo.
+- **Carrera:** los puntos de todos los jugadores se suman en un solo corredor, que lleva el nombre de la partida. Corren con él cuatro corredores automáticos (Asko, Åsa, Johan e Iina), con colores distintos del del grupo.
   - El automático más adelantado le disputa la carrera al grupo: va entre 2 casillas por detrás y 1 por delante. Cuando al grupo le faltan 4 casillas para la meta, se coloca justo 1 casilla por detrás y cruza la meta inmediatamente después del grupo.
   - Los demás nunca frenan: van entre 0 y 8 casillas por detrás del grupo, y cuando faltan 4 casillas para la meta, entre 1 y 8 por detrás.
   - Pista: el carril del grupo es verde, o marrón si el grupo eligió el verde. Los carriles de los automáticos alternan verde y marrón.
