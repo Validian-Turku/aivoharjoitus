@@ -132,3 +132,6 @@ input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.navbtn:focus-vi
 .feedtoast .tn{font-family:var(--display);font-weight:600;font-size:clamp(2rem,5vw,3.6rem);line-height:1.1;word-break:break-word}
 .feedtoast .tp{font-family:var(--display);font-size:clamp(1.5rem,3.5vw,2.6rem)}
 @media (prefers-reduced-motion:no-preference){.feedtoast{animation:pop2 .35s ease-out}@keyframes pop2{from{transform:scale(.92);opacity:.4}to{transform:none;opacity:1}}}
+
+.delbox{display:inline-flex;gap:8px;flex-wrap:wrap}
+.btn.danger{color:var(--soft);border-color:var(--soft)}
