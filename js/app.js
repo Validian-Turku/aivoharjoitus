@@ -35,7 +35,7 @@ const TEAM_COLORS = {
   violetti: { name: 'violetti', hex: '#8e24aa', ink: '#fff' }, pinkki: { name: 'pinkki', hex: '#ec407a', ink: '#fff' },
   ruskea: { name: 'ruskea', hex: '#795548', ink: '#fff' }, musta: { name: 'musta', hex: '#263238', ink: '#fff' },
 };
-const BOT_NAMES = ['Kettu', 'Jänis', 'Orava', 'Siili'];
+const BOT_NAMES = ['Asko', 'Åsa', 'Johan', 'Iina'];
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const ERR = {
   'auth/invalid-credential': 'Sähköposti tai salasana on väärin.',
@@ -221,9 +221,24 @@ function staffMain() {
         const gs = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)).slice(0, 30);
         const lab = { lobby: 'odottaa', running: 'käynnissä', ended: 'päättynyt' };
         el.innerHTML = gs.length ? gs.map(g => `<li><span><strong>${esc(g.title)}</strong> <span class="muted">· ${g.durationMin} min${all ? ' · ' + esc(g.hostName || '') : ''} · ${g.createdAt?.toDate ? g.createdAt.toDate().toLocaleString('fi-FI', { dateStyle: 'short', timeStyle: 'short' }) : ''}</span></span>
-          <span class="row"><span class="status ${g.status}">${lab[g.status] || ''}</span><button class="btn small ghost" data-open="${g.id}">Avaa</button></span></li>`).join('')
+          <span class="row"><span class="status ${g.status}">${lab[g.status] || ''}</span><button class="btn small ghost" data-open="${g.id}">Avaa</button>${me.role === 'admin' || g.hostUid === me.uid ? `<span class="delbox" data-box="${g.id}"><button class="btn small ghost danger" data-del="${g.id}">Poista</button></span>` : ''}</span></li>`).join('')
           : '<li class="muted">Ei vielä pelejä. Luo ensimmäinen peli yllä.</li>';
         el.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { location.hash = 'peli-' + b.dataset.open; });
+        el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+          const gid = b.dataset.del, box = el.querySelector(`[data-box="${gid}"]`);
+          box.innerHTML = `<button class="btn small stop" data-yes>Poista pysyvästi</button><button class="btn small ghost" data-no>Peruuta</button>`;
+          box.querySelector('[data-no]').onclick = list;
+          box.querySelector('[data-yes]').onclick = async () => {
+            box.innerHTML = '<span class="note">Poistetaan…</span>';
+            try {
+              // Primero las fichas de los jugadores, luego la partida
+              const ps = await getDocs(collection(db, 'games', gid, 'players'));
+              await Promise.all(ps.docs.map(d => deleteDoc(d.ref)));
+              await deleteDoc(doc(db, 'games', gid));
+              list();
+            } catch (err) { box.innerHTML = `<span class="err">${esc(errText(err))}</span>`; }
+          };
+        });
       }).catch(err => { const el = document.getElementById('glist'); if (el) el.innerHTML = `<li class="err">${esc(errText(err))}</li>`; });
     };
     document.getElementById('all')?.addEventListener('change', list);
@@ -298,7 +313,7 @@ function staffMain() {
         } else {
           const win = g.result === 'win';
           root.innerHTML = `<div class="row" style="justify-content:space-between">${back}<span class="status ended">päättynyt</span></div>
-            <div class="card result ${win ? 'win' : 'lose'}"><h1>${win ? 'Ryhmä voitti!' : 'Tällä kertaa ryhmä ei ehtinyt maaliin ensimmäisenä'}</h1>
+            <div class="card result ${win ? 'win' : 'lose'}"><h1>${win ? `${esc(g.title)} voitti!` : `Tällä kertaa ${esc(g.title)} ei ehtinyt maaliin ensimmäisenä`}</h1>
               <p class="muted">${esc(g.title)} · ryhmän pisteet <strong id="gp"></strong></p></div>
             <div class="card"><h2>Kilpailu</h2><div class="track" id="track"></div></div>
             <div class="feed" id="feed" aria-live="polite"></div>
@@ -331,7 +346,7 @@ function staffMain() {
     /* Kilpailu: kaikkien pelaajien pisteet samaan ryhmän juoksijaan + 4 automaattista juoksijaa */
     function renderTrack() {
       const tr = document.getElementById('track'); if (!tr || !g) return;
-      const gpts = groupPts(), list = [{ id: 'group', name: 'Ryhmä', color: g.groupColor || 'sininen', pts: gpts, group: true }, ...(bots || []).map((b, i) => ({ id: 'b' + i, ...b }))];
+      const gpts = groupPts(), list = [{ id: 'group', name: g.title || 'Ryhmä', color: g.groupColor || 'sininen', pts: gpts, group: true }, ...(bots || []).map((b, i) => ({ id: 'b' + i, ...b }))];
       const lead = Math.max(20, ...list.map(r => r.pts));
       const ended = shownState === 'ended', win = g.result === 'win';
       const F = g.finishAt, fin = !!F && (g.status === 'running' || ended);
@@ -401,7 +416,7 @@ function staffMain() {
     function tick() {
       if (!g || g.status !== 'running') return;
       const ph = document.getElementById('phase');
-      if (ph) ph.textContent = g.finishAt ? `Maali näkyy! Ryhmä tarvitsee vielä ${Math.max(0, g.finishAt - groupPts())} pistettä.` : 'Peli käynnissä';
+      if (ph) ph.textContent = g.finishAt ? `Maali näkyy! ${g.title} tarvitsee vielä ${Math.max(0, g.finishAt - groupPts())} pistettä.` : 'Peli käynnissä';
       if (!canControl() || !playersLoaded) return;
       // Maalivaihe alkaa: maaliviiva sijoitetaan noin minuutin työn päähän johtajasta
       if (!g.finishAt && finalMinute() && !ending) {
@@ -592,7 +607,7 @@ function playerMain(gameId) {
     else if (v === 'error') app.innerHTML = `<div class="card"><h1>Yhteysvirhe</h1><p>${esc(extra || '')}</p></div>`;
     else if (v === 'closed') app.innerHTML = `<div class="card"><h1>Peli on päättynyt</h1><p>Tähän peliin ei voi enää liittyä.</p></div>`;
     else if (v === 'removed') app.innerHTML = `<div class="card"><h1>Et ole enää pelissä</h1><p>Ohjaaja poisti sinut pelistä. Kysy ohjaajalta, jos tämä oli vahinko.</p></div>`;
-    else if (v === 'ended') app.innerHTML = `<div class="card" style="align-items:center;text-align:center"><h1>${g.result === 'win' ? 'Ryhmä voitti!' : 'Peli päättyi!'}</h1><p class="muted">${esc(me.name)}, toit ryhmälle</p><p class="big">${me.points || 0}</p><p class="muted">pistettä. Kiitos, hyvää työtä!</p></div>`;
+    else if (v === 'ended') app.innerHTML = `<div class="card" style="align-items:center;text-align:center"><h1>${g.result === 'win' ? `${esc(g.title)} voitti!` : 'Peli päättyi!'}</h1><p class="muted">${esc(me.name)}, toit ryhmälle</p><p class="big">${me.points || 0}</p><p class="muted">pistettä. Kiitos, hyvää työtä!</p></div>`;
     else if (v === 'join') {
       let saved = ''; try { saved = localStorage.getItem('ah-name') || ''; } catch (e) { }
       const voting = g.status === 'lobby';
