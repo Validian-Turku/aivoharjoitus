@@ -13,14 +13,16 @@ Web gratuita con tres tipos de acceso:
 ## Cómo funciona una partida
 - **Ejercicios mezclados:** Muisti, Luokittelu y Tarkkaavuus salen al azar, pero nunca más de dos preguntas seguidas de la misma categoría.
 - **Niveles:** cada jugador elige su propio nivel inicial (1–4) al entrar. Todas sus categorías empiezan en ese nivel, y después cada una sube o baja por separado: 2 aciertos seguidos suben un nivel y 2 fallos seguidos bajan uno.
-- **Quitar Tarkkaavuus:** en las preguntas de atención, el jugador tiene el botón «En näe kuvioita hyvin – poista tämä harjoitus». Después de confirmar, solo le salen Muisti y Luokittelu durante esa partida.
+- **Modo libre (Harjoittele yksin):** sin cuenta y sin carrera, desde el botón «Harjoittele yksin ilman kirjautumista» de la pantalla de inicio o con el enlace `?harjoittele` (por ejemplo `https://validian-turku.github.io/aivoharjoitus/?harjoittele`). El jugador elige las categorías y su nivel, juega lo que quiera y termina con «Lopeta peli». Solo en este modo hay botón para quitar Tarkkaavuus. No guarda nada en internet.
 - **Color del grupo:** al entrar, cada jugador vota uno de 10 colores. Al pulsar «Aloita peli» se elige al azar entre los colores más votados, y ese es el color de la ficha del grupo.
-- **Carrera:** los puntos de todos los jugadores se suman en un solo corredor, que lleva el nombre de la partida. Corren con él cuatro corredores automáticos (Asko, Åsa, Johan e Iina), con colores distintos del del grupo.
-  - El automático más adelantado le disputa la carrera al grupo: va entre 2 casillas por detrás y 1 por delante. Cuando al grupo le faltan 4 casillas para la meta, se coloca justo 1 casilla por detrás y cruza la meta inmediatamente después del grupo.
-  - Los demás nunca frenan: van entre 0 y 8 casillas por detrás del grupo, y cuando faltan 4 casillas para la meta, entre 1 y 8 por detrás.
+- **Carrera:** los puntos de todos los jugadores se suman en un solo corredor, que lleva el nombre de la partida. Corren con él cuatro corredores automáticos (Asko, Åsa, Johan e Iina), con colores distintos del del grupo y cuyos puntos también se ven.
+  - Cada punto es una casilla. El que va en cabeza avanza hasta tres cuartos de la pista; desde ahí se desplaza la pista y los demás retroceden tantas casillas como él avanza.
+  - Todos salen de la misma casilla. Antes de la meta no hay líder: cada automático va a su ritmo, entre 4 casillas por delante y 5–8 por detrás del grupo.
+  - Al aparecer la meta se fija su orden según cómo van (al azar si empatan): 1.º entre −2 y +2; 2.º entre −2 y +1; 3.º entre −4 y 0; 4.º entre −6 y −1. Cuando faltan 4 casillas, el 1.º se pone 1 por detrás y cruza justo después del grupo, y el 2.º avanza de una en una y llega tercero.
   - Pista: el carril del grupo es verde, o marrón si el grupo eligió el verde. Los carriles de los automáticos alternan verde y marrón.
 - **Tiempo:** no se muestra en ninguna pantalla. La duración que elige el ohjaaja es solo una orientación de cuánto va a durar la actividad.
 - **Meta:** aparece aproximadamente un minuto antes del final previsto, a una distancia equivalente a más o menos un minuto de trabajo del grupo. **La partida espera a que el grupo llegue**: no termina por tiempo. Cuando la ficha del grupo cruza la meta, el grupo gana.
+- **Meta fuera de pantalla:** si la meta todavía no cabe en la pista, arriba a la derecha se indica cuántas casillas faltan.
 - **Final brusco:** si la partida se corta de golpe con Stop antes de que el grupo llegue a la meta, el grupo pierde.
 
 **Claves:** el administrador pone una clave provisional al crear un usuario (se muestra solo en ese momento). Después las claves se guardan cifradas y nadie puede verlas. El administrador puede enviar un enlace para cambiarla, y cada usuario puede cambiar la suya en «Oma tili».
