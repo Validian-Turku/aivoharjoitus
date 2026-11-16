@@ -65,7 +65,7 @@ input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.navbtn:focus-vi
 .lane .pts{font-family:var(--display);font-weight:600;font-size:1.3rem;text-align:right;font-variant-numeric:tabular-nums}
 .road{position:relative;height:44px;border-radius:22px;background:repeating-linear-gradient(90deg,var(--bg) 0 18px,var(--surface) 18px 36px);border:2px solid var(--line)}
 .token{position:absolute;top:50%;width:38px;height:38px;margin-left:-19px;border-radius:50%;transform:translateY(-50%);display:grid;place-items:center;font-family:var(--display);font-weight:600;color:#fff;font-size:1.1rem;box-shadow:0 2px 6px rgba(0,0,0,.25)}
-@media (prefers-reduced-motion:no-preference){.token{transition:left .8s cubic-bezier(.3,1.4,.5,1)}}
+@media (prefers-reduced-motion:no-preference){.token{transition:left .8s ease-out}}
 .lane.lead .nm::after{content:" ★";color:var(--s-yellow)}
 .board2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:20px}
 @media (max-width:640px){.gamehead{grid-template-columns:1fr}.lane{grid-template-columns:80px 1fr 44px}}
@@ -97,7 +97,7 @@ input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.navbtn:focus-vi
 .grouplane .road{height:56px;border-width:3px;border-color:var(--accent)}
 .grouplane .token{width:50px;height:50px;margin-left:-25px;font-size:1.5rem}
 .token{color:#fff}
-.goal{display:none;position:absolute;left:92%;top:-3px;bottom:-3px;width:14px;margin-left:-7px;background:repeating-conic-gradient(var(--fg) 0 25%,var(--surface) 0 50%) 0 0/7px 7px;border-radius:2px}
+.goal{display:none;position:absolute;left:92%;transition:left .8s ease-out;top:-3px;bottom:-3px;width:14px;margin-left:-7px;background:repeating-conic-gradient(var(--fg) 0 25%,var(--surface) 0 50%) 0 0/7px 7px;border-radius:2px}
 .goal b{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:var(--display);font-size:.8rem;letter-spacing:.1em;color:var(--fg);margin-bottom:6px}
 .track.final .goal{display:block}
 .track{padding-top:22px}
@@ -121,8 +121,8 @@ input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.navbtn:focus-vi
 /* Pista: casillas verdes (claro/oscuro) y marrones (claro/oscuro), carril a carril */
 .lane.green{--sq1:#b5d99c;--sq2:#6fa65a}
 .lane.brown{--sq1:#e3c29f;--sq2:#a8774d}
-.road{--sq:44px;background:repeating-linear-gradient(90deg,var(--sq1) 0 var(--sq),var(--sq2) var(--sq) calc(var(--sq)*2));border-color:rgba(0,0,0,.25)}
-.grouplane .road{--sq:56px}
+.road{background:repeating-linear-gradient(90deg,var(--sq1) 0 var(--sq,44px),var(--sq2) var(--sq,44px) calc(var(--sq,44px)*2));border-color:rgba(0,0,0,.25)}
+@media (prefers-reduced-motion:no-preference){.road{transition:background-position .8s ease-out}}
 /* Contorno blanco y sombra oscura: la ficha se distingue sobre cualquier casilla */
 .token{filter:drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff) drop-shadow(0 2px 3px rgba(0,0,0,.55))}
 
@@ -135,3 +135,11 @@ input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.navbtn:focus-vi
 
 .delbox{display:inline-flex;gap:8px;flex-wrap:wrap}
 .btn.danger{color:var(--soft);border-color:var(--soft)}
+
+.goalhint{position:absolute;top:0;right:0;font-family:var(--display);font-weight:600;font-size:.9rem;letter-spacing:.06em;color:var(--fg);background:var(--surface);padding:2px 10px;border-radius:999px;border:2px dashed var(--fg)}
+.lane:not(.grouplane) .pts{color:var(--muted);font-size:1.1rem}
+
+.quitrow{display:flex;justify-content:flex-end}
+.skillpick{display:grid;gap:8px}
+.skillpick .sw{font-size:1.2rem;padding:12px 14px}
+.skillpick .sw input{position:static;opacity:1;width:24px;height:24px}
