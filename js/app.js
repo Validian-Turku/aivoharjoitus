@@ -70,7 +70,9 @@ function nextToast() {
   setTimeout(nextToast, toastQ.length > 3 ? 1400 : 3000);
 }
 
-if (!configured && !EMU) {
+if (params.has('harjoittele')) {
+  freePlay();                       // modo jugador libre: sin cuenta ni Firebase
+} else if (!configured && !EMU) {
   app.innerHTML = `<div class="card"><h1>Asennus kesken</h1><p>Tiedostoon <code>js/firebase-config.js</code> pitää vielä liittää Firebase-projektin asetukset.</p></div>`;
 } else if (params.get('peli')) {
   playerMain(params.get('peli'));
@@ -142,7 +144,8 @@ function staffMain() {
         <p class="err" id="msg" hidden></p>
         <button class="btn" type="submit">Kirjaudu</button>
         <button class="linkbtn" type="button" id="forgot">Unohditko salasanan?</button>
-      </form>`;
+      </form>
+      <a class="btn ghost" style="text-align:center;text-decoration:none" href="?harjoittele">Harjoittele yksin ilman kirjautumista</a>`;
     const msg = document.getElementById('msg'), show = (t, ok) => { msg.hidden = false; msg.className = ok ? 'okmsg' : 'err'; msg.textContent = t; };
     document.getElementById('f').onsubmit = async e => {
       e.preventDefault();
@@ -209,7 +212,7 @@ function staffMain() {
       const title = cleanName(document.getElementById('gt').value, 60) || `Peli ${new Date().toLocaleDateString('fi-FI')}`;
       const durationMin = +document.getElementById('gd').value;
       try {
-        const ref = await addDoc(collection(db, 'games'), { title, hostUid: me.uid, hostName: me.name, status: 'lobby', durationMin, createdAt: serverTimestamp(), startAt: null, endAt: null, stopPresses: 0, groupColor: null, bots: [], finishAt: null, abrupt: false, result: null });
+        const ref = await addDoc(collection(db, 'games'), { title, hostUid: me.uid, hostName: me.name, status: 'lobby', durationMin, createdAt: serverTimestamp(), startAt: null, endAt: null, stopPresses: 0, groupColor: null, bots: [], finishAt: null, botOrder: null, abrupt: false, result: null });
         location.hash = 'peli-' + ref.id;
       } catch (err) { const m = document.getElementById('gmsg'); m.hidden = false; m.textContent = errText(err); }
     };
@@ -269,6 +272,7 @@ function staffMain() {
       playersLoaded = true;
       if (prev && !s.metadata.hasPendingWrites) players.forEach(p => { const d = (p.points || 0) - (prev[p.id] ?? 0); if (d > 0 && g?.status === 'running') toast(cleanName(p.name) || 'Pelaaja', d); });
       prev = Object.fromEntries(players.map(p => [p.id, p.points || 0]));
+      if (canControl()) stepBots(false);
       renderPlayers(); renderTrack(); tick();
     });
     ticker = setInterval(tick, 250);
@@ -344,66 +348,120 @@ function staffMain() {
     function tally() { const t = {}; players.forEach(p => { if (TEAM_COLORS[p.color]) t[p.color] = (t[p.color] || 0) + 1; }); return t; }
 
     /* Kilpailu: kaikkien pelaajien pisteet samaan ryhmän juoksijaan + 4 automaattista juoksijaa */
+    /* Pista con cámara: cada punto es una casilla. La ficha que va en cabeza avanza hasta la casilla LIMIT;
+       a partir de ahí es la pista la que se desplaza: las casillas y las demás fichas se corren hacia atrás
+       tantas casillas como avanza el líder, de modo que siempre hay sensación de movimiento. */
+    const VIEW = 20, LIMIT = 14;   // casillas visibles en la pista · casilla donde se queda el líder
     function renderTrack() {
       const tr = document.getElementById('track'); if (!tr || !g) return;
       const gpts = groupPts(), list = [{ id: 'group', name: g.title || 'Ryhmä', color: g.groupColor || 'sininen', pts: gpts, group: true }, ...(bots || []).map((b, i) => ({ id: 'b' + i, ...b }))];
-      const lead = Math.max(20, ...list.map(r => r.pts));
       const ended = shownState === 'ended', win = g.result === 'win';
-      const F = g.finishAt, fin = !!F && (g.status === 'running' || ended);
-      const leader = list.filter(r => !r.group).reduce((m, r) => !m || r.pts > m.pts ? r : m, null);
+      const F = g.finishAt;
+      const second = Array.isArray(g.botOrder) ? list[1 + g.botOrder[1]] : null;
+      const leader = Array.isArray(g.botOrder) && list[1 + g.botOrder[0]] ? list[1 + g.botOrder[0]] : list.filter(r => !r.group).reduce((m, r) => !m || r.pts > m.pts ? r : m, null);
       if (tr.querySelectorAll('.lane').length !== list.length) {
-        tr.innerHTML = list.map((r, i) => `<div class="lane ${r.group ? 'grouplane' : ''}" data-id="${r.id}"><span class="nm">${esc(r.name)}</span><div class="road"><span class="goal" aria-hidden="true">${i === 0 ? '<b>MAALI</b>' : ''}</span><span class="token" style="left:4%"><span class="knight"></span></span></div><span class="pts"></span></div>`).join('');
+        tr.innerHTML = `<div class="goalhint" hidden></div>` + list.map((r, i) => `<div class="lane ${r.group ? 'grouplane' : ''}" data-id="${r.id}"><span class="nm">${esc(r.name)}</span><div class="road"><span class="goal" aria-hidden="true">${i === 0 ? '<b>MAALI</b>' : ''}</span><span class="token" style="left:${50 / VIEW}%"><span class="knight"></span></span></div><span class="pts"></span></div>`).join('');
       }
-      tr.classList.toggle('final', fin);
+      // Cámara: sigue al que va en cabeza; cuando la meta entra en pantalla, se detiene para que los corredores lleguen a ella
+      const lead = Math.max(0, ...list.map(r => r.pts));
+      let cam = Math.max(0, lead - LIMIT);
+      if (F) cam = Math.min(cam, Math.max(0, F - (VIEW - 2)));
+      const roadW = tr.querySelector('.road').clientWidth || 800, sq = roadW / VIEW;
+      tr.style.setProperty('--sq', sq + 'px');
+      const pct = c => (c / VIEW) * 100;
+      const goalVisible = !!F && F - cam <= VIEW;
+      tr.classList.toggle('final', goalVisible);
+      // Meta aún fuera de la pantalla: aviso a la derecha con las casillas que faltan
+      const hint = tr.querySelector('.goalhint'); hint.hidden = !F || goalVisible || ended;
+      if (F && !goalVisible) hint.textContent = `MAALI ${Math.max(0, F - gpts)} ruudun päässä →`;
       tr.querySelectorAll('.lane').forEach((l, i) => {
         const r = list[i], col = TEAM_COLORS[r.color] || TEAM_COLORS.sininen;
-        let pos = F ? 4 + 88 * Math.min(r.pts, F) / F : 4 + 80 * r.pts / lead;
-        const tk0 = l.querySelector('.token'); tk0.style.transitionDelay = '';
+        const road = l.querySelector('.road');
+        road.style.backgroundPosition = `${-cam * sq}px 0`;
+        if (F) l.querySelector('.goal').style.left = pct(F - cam) + '%';
+        let c = Math.min(r.pts, F ? F - 0.5 : Infinity) - cam + 0.5;   // centro de la casilla
+        const tk = l.querySelector('.token'); tk.style.transitionDelay = '';
         if (ended && win && F && gpts >= F) {
-          if (r.group) pos = 97;                                    // el grupo cruza la meta
-          else if (r === leader) { pos = 94.5; tk0.style.transitionDelay = '1s'; }   // el líder cruza justo después
+          if (r.group) c = F - cam + 1.2;                                        // el grupo cruza la meta
+          else if (r === leader) { c = F - cam + 0.4; tk.style.transitionDelay = '1s'; }   // el 1.º cruza justo después
+          else if (r === second) { c = F - cam + 0.2; tk.style.transitionDelay = '2s'; }   // el 2.º llega tercero
         }
+        c = Math.max(0.5, Math.min(VIEW - 0.3, c));
         // Carril del grupo: ficha verde → fondo marrón; en los demás casos, fondo verde.
         // Carriles de los automáticos: alternan marrón y verde a partir del del grupo.
         const gbg = g.groupColor === 'vihrea' ? 'brown' : 'green';
         const bg = r.group ? gbg : ((i % 2 === 1) === (gbg === 'green') ? 'brown' : 'green');
         l.classList.toggle('green', bg === 'green'); l.classList.toggle('brown', bg === 'brown');
-        const tk = l.querySelector('.token'); tk.style.left = pos + '%'; tk.querySelector('.knight').style.background = col.hex;
+        tk.style.left = pct(c) + '%'; tk.querySelector('.knight').style.background = col.hex;
         tk.setAttribute('aria-label', `${r.name}, ${col.name}`);
         l.querySelector('.nm').textContent = r.name;
-        l.querySelector('.pts').textContent = r.group ? r.pts : '';
+        const crosses = ended && win && F && gpts >= F && (r === leader || r === second);
+        l.querySelector('.pts').textContent = crosses ? Math.max(r.pts, F) : r.pts;   // los que cruzan la meta llegan a ella
       });
     }
+    const onResize = () => renderTrack();
+    window.addEventListener('resize', onResize);
+    cleanup.push(() => window.removeEventListener('resize', onResize));
 
-    function stepBots() {
-      if (!bots || !bots.length || !playersLoaded) return;
-      const gp = groupPts(), F = g.finishAt;
-      // El automático más adelantado pelea con el grupo hasta que al grupo le faltan 4 casillas para la meta
-      const leadIdx = bots.reduce((bi, b, i) => b.pts > bots[bi].pts ? i : bi, 0);
+    // advance = false: solo se aplican los márgenes respecto al grupo (cuando el grupo suma puntos), sin avance aleatorio
+    // Los automáticos se mueven al ritmo real del grupo (puntos por segundo), cada uno con su propio "ánimo" que cambia
+    // poco a poco, para que se adelanten y se queden atrás entre ellos en vez de ir todos alineados.
+    let pace = 0, paceGp = null, paceT = 0;
+    function stepBots(advance = true) {
+      if (!bots || !bots.length || !playersLoaded || g?.status !== 'running') return;
+      const gp = groupPts(), F = g.finishAt, now = Date.now();
+      let expected = 0;
+      if (advance) {
+        if (paceGp === null) { paceGp = gp; paceT = now; }
+        const dt = Math.max(0.5, (now - paceT) / 1000);
+        pace = 0.5 * pace + 0.5 * Math.max(0, gp - paceGp) / dt;   // ritmo medio del grupo
+        paceGp = gp; paceT = now; expected = pace * dt;
+      }
+      // Antes de la meta no hay orden: todos los automáticos van entre 8 casillas por detrás y 4 por delante del grupo.
+      // Cuando aparece la meta se fija su orden (1.º, 2.º, 3.º y 4.º según cómo van; al azar si empatan),
+      // y cada puesto tiene su propia distancia al grupo, para que no se alineen.
+      const BANDS = [[-2, 2], [-2, 1], [-4, 0], [-6, -1]];   // [mínimo, máximo] respecto al grupo, por puesto
+      if (F && !Array.isArray(g.botOrder)) {
+        g.botOrder = bots.map((b, i) => [i, b.pts, Math.random()]).sort((x, y) => y[1] - x[1] || x[2] - y[2]).map(x => x[0]);
+        updateDoc(gref, { botOrder: g.botOrder }).catch(() => { });
+      }
       const released = !!F && gp >= F - 4;
-      bots.forEach((b, i) => {
+      const seq = Array.isArray(g.botOrder) ? g.botOrder : bots.map((b, i) => i);   // con orden fijado: del 1.º al 4.º
+      seq.forEach(i => {
+        const b = bots[i];
         let np = b.pts;
-        if (i === leadIdx) {
-          if (!released) {
-            // Líder: entre 2 casillas por detrás y 1 por delante del grupo
-            if (Math.random() < 0.6) np += 1;
-            np = Math.min(np, gp + 1);
-            np = Math.max(np, b.pts, gp - 2);
-          } else {
-            // Faltan 4 casillas: el líder sigue al grupo justo 1 casilla por detrás
-            np = Math.max(b.pts, gp - 1);
-          }
+        if (b.mood == null) b.mood = 0.8 + Math.random() * 0.5;
+        b.mood = Math.min(1.5, Math.max(0.6, b.mood + (Math.random() - 0.5) * 0.3));
+        const gain = advance && gp > 0 ? (Math.round(expected * b.mood * (0.6 + Math.random())) || (Math.random() < 0.3 ? 1 : 0)) : 0;
+        if (!F) {
+          // Cada automático tiene su propio límite trasero (8, 7, 6 o 5 casillas), para que no se alineen si el grupo va rápido
+          if (b.slack == null) { const used = bots.map(x => x.slack); b.slack = [8, 7, 6, 5].find(v => !used.includes(v)) ?? 8; }
+          np = Math.min(np + gain, gp + 4);
+          np = Math.max(np, b.pts, gp - b.slack);
         } else {
-          // Resto: entre 0 y 8 casillas por detrás; cuando faltan 4 casillas, entre 1 y 8 por detrás
-          if (Math.random() < 0.55) np += rnd(1, 2);
-          np = Math.min(np, released ? gp - 1 : gp);
-          np = Math.max(np, b.pts, gp - 8);
+          const rank = Math.max(0, g.botOrder.indexOf(i)), [lo, hi] = BANDS[Math.min(rank, BANDS.length - 1)];
+          const ahead = rank > 0 ? bots[g.botOrder[rank - 1]] : null;
+          if (rank === 0 && released) {
+            // Faltan 4 casillas: el 1.º sigue al grupo justo 1 casilla por detrás y cruza la meta después
+            np = Math.max(b.pts, gp - 1);
+          } else if (rank === 1 && released) {
+            // Faltan 4 casillas: el 2.º avanza de una en una, detrás del 1.º, y llega tercero
+            np = Math.min(b.pts + (advance ? 1 : 0), gp - 2);
+            if (ahead) np = Math.min(np, ahead.pts - 1);
+            np = Math.max(np, b.pts);
+          } else {
+            np = Math.min(np + gain, gp + hi);
+            if (released) np = Math.min(np, gp - 1);
+            np = Math.max(np, b.pts, gp + lo);
+            // nunca a la altura del que va justo delante en el orden
+            if (ahead) np = Math.max(b.pts, Math.min(np, ahead.pts - 1));
+          }
         }
         if (F) np = Math.min(np, Math.max(b.pts, F - 1));   // ningún automático cruza la meta antes que el grupo
         b.pts = np;
       });
       const key = JSON.stringify(bots.map(b => b.pts));
-      if (key !== lastBotWrite) { lastBotWrite = key; updateDoc(gref, { bots }).catch(() => { }); }
+      if (key !== lastBotWrite) { lastBotWrite = key; updateDoc(gref, { bots: bots.map(({ name, color, pts }) => ({ name, color, pts })) }).catch(() => { }); }
       renderTrack();
     }
 
@@ -416,7 +474,7 @@ function staffMain() {
     function tick() {
       if (!g || g.status !== 'running') return;
       const ph = document.getElementById('phase');
-      if (ph) ph.textContent = g.finishAt ? `Maali näkyy! ${g.title} tarvitsee vielä ${Math.max(0, g.finishAt - groupPts())} pistettä.` : 'Peli käynnissä';
+      if (ph) ph.textContent = g.finishAt ? `Maali lähestyy! ${g.title} tarvitsee vielä ${Math.max(0, g.finishAt - groupPts())} pistettä.` : 'Peli käynnissä';
       if (!canControl() || !playersLoaded) return;
       // Maalivaihe alkaa: maaliviiva sijoitetaan noin minuutin työn päähän johtajasta
       if (!g.finishAt && finalMinute() && !ending) {
@@ -424,7 +482,7 @@ function staffMain() {
         const pace = groupPts() / mins, lead = Math.max(groupPts(), ...(bots || []).map(b => b.pts));
         const finishAt = lead + Math.max(4, Math.round(pace));
         g.finishAt = finishAt; updateDoc(gref, { finishAt }).catch(() => { g.finishAt = null; });
-        renderTrack();
+        stepBots(false);   // fija enseguida el orden de los automáticos
       }
       // Ryhmä ylitti maaliviivan: ryhmä voittaa
       if (g.finishAt && groupPts() >= g.finishAt && !ending) {
@@ -594,7 +652,7 @@ function playerMain(gameId) {
     return show('play');
   }
 
-  function bar() { const c = TEAM_COLORS[g?.groupColor]; return `<div class="pbar"><span>${c ? `<span class="cdot" style="background:${c.hex}" title="Ryhmän väri: ${c.name}"></span>` : ''}<strong>${esc(me?.name || '')}</strong> · toit ryhmälle ${me?.points || 0} p</span>${g?.finishAt ? '<span class="pfin">Maali näkyy – vielä vähän!</span>' : ''}</div>`; }
+  function bar() { const c = TEAM_COLORS[g?.groupColor]; return `<div class="pbar"><span>${c ? `<span class="cdot" style="background:${c.hex}" title="Ryhmän väri: ${c.name}"></span>` : ''}<strong>${esc(me?.name || '')}</strong> · toit ryhmälle ${me?.points || 0} p</span>${g?.finishAt ? '<span class="pfin">Maali lähestyy – vielä vähän!</span>' : ''}</div>`; }
 
   function show(v, extra) {
     if (v === view && v === 'play') { const b = document.getElementById('pbar'); if (b) b.innerHTML = bar(); ex?.refreshStatus(); return; }
@@ -640,4 +698,36 @@ function playerMain(gameId) {
     }
   }
 
+}
+
+/* ===================================================================== */
+/* MODO JUGADOR LIBRE: sin cuenta, sin carrera; elige harjoitukset y juega hasta que quiera */
+/* ===================================================================== */
+function freePlay() {
+  let ex = null, chosen = ['muisti', 'luokittelu', 'tarkkaavuus'], level = 1;
+  try { const p = JSON.parse(localStorage.getItem('ah-free') || '{}'); if (Array.isArray(p.skills) && p.skills.length) chosen = p.skills; if (p.level) level = p.level; } catch (e) { }
+  const NAMES = { muisti: 'Muisti', luokittelu: 'Luokittelu', tarkkaavuus: 'Tarkkaavuus' };
+  function setup() {
+    ex?.stop(); ex = null;
+    app.innerHTML = `<div><h1>Harjoittele</h1><p class="muted">Valitse harjoitukset ja aloitustaso. Voit pelata niin kauan kuin haluat ja lopettaa milloin tahansa.</p></div>
+      <form class="card form" id="ff" novalidate>
+        <fieldset class="colors"><legend class="label">Mitä haluat harjoitella?</legend><div class="skillpick">
+          ${Object.entries(NAMES).map(([k, n]) => `<label class="sw"><input type="checkbox" name="sk" value="${k}" ${chosen.includes(k) ? 'checked' : ''}><span>${n}</span></label>`).join('')}
+        </div></fieldset>
+        <fieldset class="colors"><legend class="label">Aloitustaso</legend><div class="lvlrow">${[1, 2, 3, 4].map(l => `<label class="sw lvsw"><input type="radio" name="lv" value="${l}" ${l === level ? 'checked' : ''}><span class="lvn">${l}</span></label>`).join('')}</div>
+        <p class="note">1 = helpoin · 4 = vaikein. Taso muuttuu itsestään.</p></fieldset>
+        <p class="err" id="fmsg" hidden></p>
+        <button class="btn" type="submit">Aloita</button>
+      </form>`;
+    document.getElementById('ff').onsubmit = e => {
+      e.preventDefault();
+      chosen = [...document.querySelectorAll('input[name=sk]:checked')].map(i => i.value);
+      level = +(document.querySelector('input[name=lv]:checked')?.value || 1);
+      if (!chosen.length) { const m = document.getElementById('fmsg'); m.hidden = false; m.textContent = 'Valitse vähintään yksi harjoitus.'; return; }
+      try { localStorage.setItem('ah-free', JSON.stringify({ skills: chosen, level })); localStorage.removeItem('ah-off-vapaa'); } catch (e2) { }
+      app.innerHTML = '<div id="ex" class="form" style="gap:24px"></div>';
+      ex = createExercise(document.getElementById('ex'), { skills: chosen, startLevel: level, storageKey: 'vapaa', allowRemove: true, onQuit: () => { }, onRestart: setup });
+    };
+  }
+  setup();
 }

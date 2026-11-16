@@ -72,6 +72,8 @@ export function createExercise(root, opts = {}) {
   const total = opts.total ?? Infinity;
   const skey = 'ah-off-' + (opts.storageKey || 'harjoitus');
   let off = []; try { off = JSON.parse(localStorage.getItem(skey) || '[]').filter(k => SKILLS[k]); } catch (e) { }
+  // opts.skills: el jugador ha elegido qué harjoitukset quiere (modo libre)
+  if (Array.isArray(opts.skills) && opts.skills.length) off = Object.keys(SKILLS).filter(k => !opts.skills.includes(k));
   const st = Object.fromEntries(Object.keys(SKILLS).map(k => [k, { level: start, ok: 0, bad: 0, lastId: null }]));
   const run = { n: 0, points: 0, sendFail: 0, history: [], cur: null, expTimer: null };
   let stopped = false;
@@ -87,8 +89,11 @@ export function createExercise(root, opts = {}) {
 
   const dots = level => { let h = `<span class="levels" aria-label="Taso ${level}/${MAXL}">Taso ${level} `; for (let i = 1; i <= MAXL; i++) h += `<span class="dot${i <= level ? ' on' : ''}"></span>`; return h + '</span>'; };
   const statusText = () => [isFinite(total) ? `Tehtävä ${Math.min(run.n + 1, total)} / ${total}` : null, `${run.points} p`].filter(Boolean).map(esc).join(' · ');
-  const header = () => { const q = run.cur; return `<div class="top"><span class="skilltag">${esc(SKILLS[q.skill].name)}</span>${dots(st[q.skill].level)}<span class="progress" id="ex-status">${statusText()}</span></div>`; };
-  const removeBtn = q => q.skill === 'tarkkaavuus' && active().length > 1
+  // opts.onQuit: botón «Lopeta peli» arriba, antes del texto de la pregunta
+  const quitBtn = () => opts.onQuit ? `<button class="btn small ghost" data-ex-quit>Lopeta peli</button>` : '';
+  const header = () => { const q = run.cur; return `${opts.onQuit ? `<div class="quitrow">${quitBtn()}</div>` : ''}<div class="top"><span class="skilltag">${esc(SKILLS[q.skill].name)}</span>${dots(st[q.skill].level)}<span class="progress" id="ex-status">${statusText()}</span></div>`; };
+  // opts.allowRemove: botón para quitar Tarkkaavuus (solo en el modo libre; no en el juego en grupo)
+  const removeBtn = q => opts.allowRemove && q.skill === 'tarkkaavuus' && active().length > 1
     ? `<div id="ex-rm"><button class="btn ghost" id="ex-rmbtn">En näe kuvioita hyvin – poista tämä harjoitus</button></div>` : '';
 
   function pick(skill) {
@@ -176,10 +181,14 @@ export function createExercise(root, opts = {}) {
   }
 
   function finished() {
-    const rows = Object.keys(SKILLS).map(k => `<li><span>${esc(SKILLS[k].name)}${off.includes(k) ? ' (poistettu)' : ''}</span><span>taso ${st[k].level}</span></li>`).join('');
-    root.innerHTML = `<div class="card" style="align-items:center;text-align:center"><h2>Valmis!</h2><p class="muted">Pisteet</p><p class="big">${run.points}</p></div>
-      <div class="card"><h2>Tasot nyt</h2><ul class="lb">${rows}</ul></div>`;
+    stopped = true; clearInterval(run.expTimer);
+    const rows = Object.keys(SKILLS).filter(k => !off.includes(k)).map(k => `<li><span>${esc(SKILLS[k].name)}</span><span>taso ${st[k].level}</span></li>`).join('');
+    root.innerHTML = `<div class="card" style="align-items:center;text-align:center"><h2>Valmis!</h2><p class="muted">Vastasit ${run.n} kysymykseen ja sait</p><p class="big">${run.points}</p><p class="muted">pistettä</p></div>
+      <div class="card"><h2>Tasot nyt</h2><ul class="lb">${rows}</ul></div>
+      ${opts.onRestart ? '<button class="btn" data-ex-again>Pelaa uudelleen</button>' : ''}`;
+    root.querySelector('[data-ex-again]')?.addEventListener('click', () => opts.onRestart());
   }
+  root.addEventListener('click', e => { if (!stopped && e.target.closest('[data-ex-quit]')) { opts.onQuit?.(); finished(); } });
 
   next();
   return {
